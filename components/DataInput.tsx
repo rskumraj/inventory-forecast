@@ -54,13 +54,24 @@ function parseInventoryCSV(text: string, defaultLead: number): { products: Produ
 function parseHistoryCSV(text: string): { rows: HistoryRow[]; errors: string[] } {
   const { data } = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
   const errors: string[] = [];
+
+  // Map normalized header -> raw header actually present in the file, so lookups are case/whitespace-insensitive.
+  const rawHeaders = Object.keys(data[0] ?? {});
+  const headerMap = new Map<string, string>();
+  for (const h of rawHeaders) headerMap.set(normalizeHeader(h), h);
+
   const required = ['Product', 'Date', 'Units Sold'];
-  const missing = required.filter(c => !Object.keys(data[0] ?? {}).includes(c));
+  const missing = required.filter(c => !headerMap.has(normalizeHeader(c)));
   if (missing.length) { errors.push(`Missing columns: ${missing.join(', ')}`); return { rows: [], errors }; }
+
+  const productKey = headerMap.get(normalizeHeader('Product'))!;
+  const dateKey    = headerMap.get(normalizeHeader('Date'))!;
+  const unitsKey   = headerMap.get(normalizeHeader('Units Sold'))!;
+
   const rows: HistoryRow[] = data.map(r => ({
-    product:    r['Product']?.trim() ?? '',
-    date:       r['Date']?.trim() ?? '',
-    unitsSold:  parseFloat(r['Units Sold']) || 0,
+    product:    r[productKey]?.trim() ?? '',
+    date:       r[dateKey]?.trim() ?? '',
+    unitsSold:  parseFloat(r[unitsKey]) || 0,
   })).filter(r => r.product && r.date);
   return { rows, errors };
 }
