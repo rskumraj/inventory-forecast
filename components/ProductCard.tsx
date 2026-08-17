@@ -53,7 +53,7 @@ export default function ProductCard({ result, defaultLeadTime }: Props) {
     chips = [
       { text: `STOCK COVERAGE: ${result.wos.toFixed(1)}WOS`, color: 'bg-[#D1FAE5] text-[#065F46]' },
       { text: `NEXT PO: ${result.reorderQty.toFixed(0)} UNITS`, color: 'bg-[#D1FAE5] text-[#065F46]' },
-      { text: `PEAK DEMAND: ${result.peakDate}`, color: 'bg-[#F1F5F9] text-[#475569]' },
+      { text: (result.peakDate && result.peakDate !== 'N/A') ? `PEAK DEMAND: ${result.peakDate}` : 'PEAK DEMAND: UPLOAD SALES HISTORY', color: 'bg-[#F1F5F9] text-[#475569]' },
       { text: `VELOCITY: ${result.avgForecast.toFixed(1)}/DAY`, color: 'bg-[#F1F5F9] text-[#475569]' },
       sourceChip,
     ];
