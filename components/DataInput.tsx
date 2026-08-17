@@ -12,23 +12,43 @@ interface Props {
 type Tab = 'csv' | 'manual' | 'history';
 
 /* ── helpers ── */
-function parseInventoryCSV(text: string, defaultLead: number): { products: Product[]; errors: string[] } {
+// Trim + lowercase a header so "Lead Time (Days)", " lead time (days)", etc. all match the same column.
+const normalizeHeader = (h: string) => h.trim().toLowerCase();
+
+function parseInventoryCSV(text: string, defaultLead: number): { products: Product[]; errors: string[]; notices: string[] } {
   const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
   const products: Product[] = [];
   const errors: string[] = [];
+  const notices: string[] = [];
+
+  // Map normalized header -> raw header actually present in the file, so lookups are case/whitespace-insensitive.
+  const rawHeaders = Object.keys(data[0] ?? {});
+  const headerMap = new Map<string, string>();
+  for (const h of rawHeaders) headerMap.set(normalizeHeader(h), h);
+
   const required = ['Product', 'Current Stock', 'Avg Daily Sales'];
-  const missing = required.filter(c => !Object.keys(data[0] ?? {}).includes(c));
-  if (missing.length) { errors.push(`Missing columns: ${missing.join(', ')}`); return { products, errors }; }
+  const missing = required.filter(c => !headerMap.has(normalizeHeader(c)));
+  if (missing.length) { errors.push(`Missing columns: ${missing.join(', ')}`); return { products, errors, notices }; }
+
+  const productKey = headerMap.get(normalizeHeader('Product'))!;
+  const stockKey   = headerMap.get(normalizeHeader('Current Stock'))!;
+  const salesKey   = headerMap.get(normalizeHeader('Avg Daily Sales'))!;
+  const leadKey    = headerMap.get(normalizeHeader('Lead Time (days)'));
+
+  if (!leadKey) {
+    notices.push(`Lead Time (Days) column not found — using default (${defaultLead}d) for all products`);
+  }
+
   for (const row of data) {
-    if (!row['Product']?.trim()) continue;
+    if (!row[productKey]?.trim()) continue;
     products.push({
-      product:       row['Product'].trim(),
-      currentStock:  parseFloat(row['Current Stock']) || 0,
-      avgDailySales: parseFloat(row['Avg Daily Sales']) || 0,
-      leadTimeDays:  parseFloat(row['Lead Time (days)'] ?? String(defaultLead)) || defaultLead,
+      product:       row[productKey].trim(),
+      currentStock:  parseFloat(row[stockKey]) || 0,
+      avgDailySales: parseFloat(row[salesKey]) || 0,
+      leadTimeDays:  leadKey ? (parseFloat(row[leadKey]) || defaultLead) : defaultLead,
     });
   }
-  return { products, errors };
+  return { products, errors, notices };
 }
 
 function parseHistoryCSV(text: string): { rows: HistoryRow[]; errors: string[] } {
@@ -136,6 +156,7 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
   const [csvProducts, setCsvProducts]         = useState<Product[] | null>(null);
   const [csvFileLabel, setCsvFileLabel]        = useState('');
   const [csvErrors, setCsvErrors]             = useState<string[]>([]);
+  const [csvNotices, setCsvNotices]           = useState<string[]>([]);
 
   /* History tab */
   const [historyRows, setHistoryRows]         = useState<HistoryRow[]>([]);
@@ -149,17 +170,20 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
   function handleCSVFiles(files: File[]) {
     const allProducts: Product[] = [];
     const allErrors: string[] = [];
+    const allNotices: string[] = [];
     let processed = 0;
     for (const f of files) {
       const reader = new FileReader();
       reader.onload = e => {
         const text = e.target?.result as string;
-        const { products, errors } = parseInventoryCSV(text, defaultLeadTime);
+        const { products, errors, notices } = parseInventoryCSV(text, defaultLeadTime);
         allProducts.push(...products);
         allErrors.push(...errors.map(err => `${f.name}: ${err}`));
+        allNotices.push(...notices.map(n => `${f.name}: ${n}`));
         processed++;
         if (processed === files.length) {
           setCsvErrors(allErrors);
+          setCsvNotices(allNotices);
           if (allProducts.length) {
             setCsvProducts(allProducts);
             setCsvFileLabel(`${allProducts.length} products loaded from ${files.map(f => f.name).join(', ')}`);
@@ -260,11 +284,12 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
           </div>
 
           {csvProducts ? (
-            <LoadedCard label={csvFileLabel} onClear={() => { setCsvProducts(null); setCsvFileLabel(''); setCsvErrors([]); }} />
+            <LoadedCard label={csvFileLabel} onClear={() => { setCsvProducts(null); setCsvFileLabel(''); setCsvErrors([]); setCsvNotices([]); }} />
           ) : (
             <DropZone onFiles={handleCSVFiles} />
           )}
           {csvErrors.map((e, i) => <p key={i} className="text-red-500 text-[12px] mt-2">{e}</p>)}
+          {csvNotices.map((n, i) => <p key={i} className="text-amber-600 text-[12px] mt-2">⚠️ {n}</p>)}
         </div>
       )}
 
