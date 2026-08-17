@@ -168,11 +168,13 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
   const [csvFileLabel, setCsvFileLabel]        = useState('');
   const [csvErrors, setCsvErrors]             = useState<string[]>([]);
   const [csvNotices, setCsvNotices]           = useState<string[]>([]);
+  const [sampleLoading, setSampleLoading]     = useState(false);
 
   /* History tab */
   const [historyRows, setHistoryRows]         = useState<HistoryRow[]>([]);
   const [historyLabel, setHistoryLabel]       = useState('');
   const [historyErrors, setHistoryErrors]     = useState<string[]>([]);
+  const [sampleHistoryLoading, setSampleHistoryLoading] = useState(false);
 
   /* Manual tab */
   const [manualRows, setManualRows]           = useState<Product[]>([EMPTY_ROW(), EMPTY_ROW(), EMPTY_ROW()]);
@@ -232,6 +234,42 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
     }
   }
 
+  async function loadSampleData() {
+    setSampleLoading(true);
+    try {
+      const res = await fetch('/sample_data.csv');
+      const text = await res.text();
+      const { products, errors, notices } = parseInventoryCSV(text, defaultLeadTime);
+      setCsvErrors(errors);
+      setCsvNotices(notices);
+      if (products.length) {
+        setCsvProducts(products);
+        setCsvFileLabel(`${products.length} products loaded from sample data`);
+        onDataReady(products, historyRows);
+      }
+    } finally {
+      setSampleLoading(false);
+    }
+  }
+
+  async function loadSampleHistory() {
+    setSampleHistoryLoading(true);
+    try {
+      const res = await fetch('/sample_history.csv');
+      const text = await res.text();
+      const { rows, errors } = parseHistoryCSV(text);
+      setHistoryErrors(errors);
+      if (rows.length) {
+        setHistoryRows(rows);
+        const products = new Set(rows.map(r => r.product)).size;
+        setHistoryLabel(`${products} products · ${rows.length} rows of history from sample data`);
+        if (csvProducts) onDataReady(csvProducts, rows);
+      }
+    } finally {
+      setSampleHistoryLoading(false);
+    }
+  }
+
   function runManual() {
     const valid = manualRows.filter(r => r.product.trim() && r.avgDailySales > 0);
     if (!valid.length) return;
@@ -285,13 +323,22 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
             <span className={tagCls('bg-[#DBEAFE] text-[#1D4ED8]')}>AVG DAILY SALES</span>
             <span className={tagCls('bg-[#DBEAFE] text-[#1D4ED8]')}>LEAD TIME (DAYS)</span>
             <br />
-            <a
-              href="/sample_data.csv"
-              download
-              className="inline-flex items-center gap-1.5 mt-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg px-3.5 py-2 text-[12px] font-semibold text-[#1D4ED8] hover:bg-blue-100 transition-colors"
-            >
-              ↗ View Sample File
-            </a>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <button
+                onClick={loadSampleData}
+                disabled={sampleLoading}
+                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg px-3.5 py-2 text-[12px] font-semibold transition-colors"
+              >
+                {sampleLoading ? 'Loading…' : '✨ Try with Sample Data'}
+              </button>
+              <a
+                href="/sample_data.csv"
+                download
+                className="inline-flex items-center gap-1.5 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg px-3.5 py-2 text-[12px] font-semibold text-[#1D4ED8] hover:bg-blue-100 transition-colors"
+              >
+                ↗ View Sample File
+              </a>
+            </div>
           </div>
 
           {csvProducts ? (
@@ -346,13 +393,22 @@ export default function DataInput({ onDataReady, defaultLeadTime }: Props) {
             <span className={tagCls('bg-[#FED7AA] text-[#C2410C]')}>DATE (YYYY-MM-DD)</span>
             <span className={tagCls('bg-[#FED7AA] text-[#C2410C]')}>UNITS SOLD</span>
             <br />
-            <a
-              href="/sample_history.csv"
-              download
-              className="inline-flex items-center gap-1.5 mt-3 bg-[#FFF7ED] border border-[#FDBA74] rounded-lg px-3.5 py-2 text-[12px] font-semibold text-[#C2410C] hover:bg-orange-100 transition-colors"
-            >
-              ↗ View Sample File
-            </a>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <button
+                onClick={loadSampleHistory}
+                disabled={sampleHistoryLoading}
+                className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-lg px-3.5 py-2 text-[12px] font-semibold transition-colors"
+              >
+                {sampleHistoryLoading ? 'Loading…' : '✨ Try with Sample Data'}
+              </button>
+              <a
+                href="/sample_history.csv"
+                download
+                className="inline-flex items-center gap-1.5 bg-[#FFF7ED] border border-[#FDBA74] rounded-lg px-3.5 py-2 text-[12px] font-semibold text-[#C2410C] hover:bg-orange-100 transition-colors"
+              >
+                ↗ View Sample File
+              </a>
+            </div>
           </div>
 
           {historyRows.length > 0 ? (
